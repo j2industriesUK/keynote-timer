@@ -8,6 +8,7 @@ struct Keynote_TimerApp: App {
     @State private var engine: TimerEngine
 
     init() {
+        NSUbiquitousKeyValueStore.default.synchronize()
         let settings = SettingsStore()
         let presets = PresetStore()
         let notifications = NotificationService()
