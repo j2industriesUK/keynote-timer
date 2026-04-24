@@ -24,6 +24,7 @@ final class SettingsStore {
     static let hapticsKey = "settings.hapticsEnabled"
     static let soundKey = "settings.soundEnabled"
     static let themeKey = "settings.themePreference"
+    static let iCloudSyncKey = "settings.iCloudSyncEnabled"
 
     var hapticsEnabled: Bool {
         didSet { UserDefaults.standard.set(hapticsEnabled, forKey: Self.hapticsKey) }
@@ -33,6 +34,9 @@ final class SettingsStore {
     }
     var themePreference: ThemePreference {
         didSet { UserDefaults.standard.set(themePreference.rawValue, forKey: Self.themeKey) }
+    }
+    var iCloudSyncEnabled: Bool {
+        didSet { UserDefaults.standard.set(iCloudSyncEnabled, forKey: Self.iCloudSyncKey) }
     }
 
     init() {
@@ -44,5 +48,6 @@ final class SettingsStore {
         self.soundEnabled = defaults.bool(forKey: Self.soundKey)
         let raw = defaults.string(forKey: Self.themeKey) ?? ThemePreference.system.rawValue
         self.themePreference = ThemePreference(rawValue: raw) ?? .system
+        self.iCloudSyncEnabled = defaults.bool(forKey: Self.iCloudSyncKey)
     }
 }

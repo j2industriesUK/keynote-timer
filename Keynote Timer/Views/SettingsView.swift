@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SettingsStore.self) private var settings
+    @Environment(PresetStore.self) private var presets
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -30,6 +31,24 @@ struct SettingsView: View {
                         Text("Feedback")
                     } footer: {
                         Text("Haptics and subtle chimes play at segment transitions, the final segment, the final minute, and when time is up. Sound respects the device silent switch.")
+                    }
+
+                    Section {
+                        Toggle(isOn: Binding(
+                            get: { settings.iCloudSyncEnabled },
+                            set: { newValue in
+                                settings.iCloudSyncEnabled = newValue
+                                presets.switchStorage(to: newValue)
+                            }
+                        )) {
+                            Label("iCloud Sync", systemImage: "icloud")
+                        }
+                    } header: {
+                        Text("Saved Timers")
+                    } footer: {
+                        Text(settings.iCloudSyncEnabled
+                             ? "Your saved timers are synced across all your devices via iCloud."
+                             : "Your saved timers are stored locally on this device only.")
                     }
 
                     Section {

@@ -4,21 +4,16 @@ import SwiftUI
 final class PresetStore {
     private static let key = "presets.v1"
     private static let icloud = NSUbiquitousKeyValueStore.default
+
     private(set) var presets: [TimerPreset] = []
+    private(set) var iCloudEnabled: Bool = false
 
     init() {
-        migrateFromUserDefaultsIfNeeded()
+        // Default: load from local storage
         load()
-        // Pull latest values from iCloud before showing UI
-        Self.icloud.synchronize()
-        // Listen for changes pushed from other devices
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(icloudDidChange),
-            name: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
-            object: Self.icloud
-        )
     }
+
+    // MARK: - Public mutations
 
     func add(name: String, configuration: TimerConfiguration) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,31 +45,79 @@ final class PresetStore {
         save()
     }
 
+    // MARK: - Storage switching
+
+    /// Switch between local (UserDefaults) and iCloud (NSUbiquitousKeyValueStore) storage.
+    /// Migrates current presets into the destination store if it is empty.
+    func switchStorage(to useICloud: Bool) {
+        guard useICloud != iCloudEnabled else { return }
+
+        if useICloud {
+            enableICloud()
+        } else {
+            disableICloud()
+        }
+    }
+
     // MARK: - Private
 
     private func load() {
-        guard let data = Self.icloud.data(forKey: Self.key) else { return }
-        if let decoded = try? JSONDecoder().decode([TimerPreset].self, from: data) {
-            presets = decoded
+        let data: Data?
+        if iCloudEnabled {
+            data = Self.icloud.data(forKey: Self.key)
+        } else {
+            data = UserDefaults.standard.data(forKey: Self.key)
         }
+        guard let data,
+              let decoded = try? JSONDecoder().decode([TimerPreset].self, from: data) else { return }
+        presets = decoded
     }
 
     private func save() {
-        if let data = try? JSONEncoder().encode(presets) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        if iCloudEnabled {
             Self.icloud.set(data, forKey: Self.key)
             Self.icloud.synchronize()
+        } else {
+            UserDefaults.standard.set(data, forKey: Self.key)
         }
     }
 
-    /// One-time migration: copy existing UserDefaults presets into iCloud KV store.
-    private func migrateFromUserDefaultsIfNeeded() {
-        let localData = UserDefaults.standard.data(forKey: Self.key)
+    private func enableICloud() {
+        // Migrate current local presets into iCloud if iCloud is empty
         let cloudData = Self.icloud.data(forKey: Self.key)
-        // Only migrate if local data exists and iCloud is empty
-        guard let local = localData, cloudData == nil else { return }
-        Self.icloud.set(local, forKey: Self.key)
+        if cloudData == nil, let localData = UserDefaults.standard.data(forKey: Self.key) {
+            Self.icloud.set(localData, forKey: Self.key)
+            Self.icloud.synchronize()
+        }
+
+        iCloudEnabled = true
+
+        // Pull freshest data from iCloud (may have presets from other devices)
         Self.icloud.synchronize()
-        UserDefaults.standard.removeObject(forKey: Self.key)
+        load()
+
+        // Listen for changes pushed from other devices
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(icloudDidChange),
+            name: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: Self.icloud
+        )
+    }
+
+    private func disableICloud() {
+        // Persist current presets (which may have been synced from iCloud) to local store
+        if let data = try? JSONEncoder().encode(presets) {
+            UserDefaults.standard.set(data, forKey: Self.key)
+        }
+
+        iCloudEnabled = false
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: Self.icloud
+        )
     }
 
     @objc private func icloudDidChange(_ notification: Notification) {
@@ -83,7 +126,6 @@ final class PresetStore {
               let changedKeys = userInfo[NSUbiquitousKeyValueStoreChangedKeysKey] as? [String],
               changedKeys.contains(Self.key) else { return }
 
-        // Reasons: server change, initial sync, quota violation
         let validReasons = [
             NSUbiquitousKeyValueStoreServerChange,
             NSUbiquitousKeyValueStoreInitialSyncChange,

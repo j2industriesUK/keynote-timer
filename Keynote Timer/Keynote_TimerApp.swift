@@ -8,9 +8,13 @@ struct Keynote_TimerApp: App {
     @State private var engine: TimerEngine
 
     init() {
-        NSUbiquitousKeyValueStore.default.synchronize()
         let settings = SettingsStore()
         let presets = PresetStore()
+        // Restore the user's chosen storage backend
+        if settings.iCloudSyncEnabled {
+            NSUbiquitousKeyValueStore.default.synchronize()
+            presets.switchStorage(to: true)
+        }
         let notifications = NotificationService()
         let haptics = HapticsService(enabled: { settings.hapticsEnabled })
         let sound = SoundService(enabled: { settings.soundEnabled })
